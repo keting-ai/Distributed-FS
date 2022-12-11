@@ -4,15 +4,15 @@
 #define MFS_DIRECTORY    (0)
 #define MFS_REGULAR_FILE (1)
 
-#define MFS_LOOKUP	1
-#define MFS_STAT  	2
-#define MFS_WRITE   3
-#define MFS_READ    4
-#define MFS_CREAT	5
-#define MFS_UNLINK  6
-#define MFS_SHUTDOWN 7
-#define MFS_ERROR   8
-#define MFS_BUFFER	4096	
+#define MFS_LOOKUP    1
+#define MFS_STAT      2
+#define MFS_WRITE     3
+#define MFS_READ      4
+#define MFS_CREAT     5
+#define MFS_UNLINK    6
+#define MFS_SHUTDOWN  7
+#define MFS_ERROR     8
+#define MFS_BUFFER    4096    
 
 #define MFS_BLOCK_SIZE   (4096)
 
