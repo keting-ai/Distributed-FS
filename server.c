@@ -215,10 +215,105 @@ int server_Write(int inum, char *buffer, int offset, int nbytes){
 }
 
 int server_Read(int inum, char *buffer, int offset, int nbytes){
-    return 0;
+	MFS_Msg_t reply;
+    reply.msg_type = MFS_READ;
+    unsigned int inode_bit = get_bit(inbm_addr, inum);
+    if(!inode_bit || nbytes > MFS_BUFFER || sizeof(buffer) > MFS_BLOCK_SIZE){
+        server_Error(&reply);
+        return -1;
+    }
+	inode_t* inode = inrg_addr + inum * UFS_BLOCK_SIZE;
+    int size = inode->size;
+    int type = inode->type;
+    if(offset >= size){
+        server_Error(&reply);
+        return -1;
+    }
+    if(type != MFS_REGULAR_FILE || type != MFS_DIRECTORY){
+        server_Error(&reply);
+        return -1;
+    }
+    // find the start location of offset to read
+    int start_blk = offset / 4096;
+    int start_off = offset % 4096;
+    int remain_bytes = nbytes;
+    int blk_read_off = start_off;
+    int buffer_off = 0;
+    unsigned int this_block = inode->direct[start_blk]; // in blocks current writing block
+    unsigned int this_block_addr = *((int*)start) + this_block * UFS_BLOCK_SIZE;
+    unsigned int cur_read_addr = this_block_addr + start_off;
+
+    // Directory case: cannot read if it doesn't read from start of each entry
+    if(type == MFS_DIRECTORY && start_off % 32 != 0){
+        server_Error(&reply);
+        return -1;
+    }
+
+    // write until this block is full
+    // to another block(if there's following block, use that, otherwise use a unused)
+    int i = 0;
+    while(remain_bytes > 0){
+        if(blk_read_off < 4096){
+            *(buffer + buffer_off) = *(char*)(void*)(intptr_t)cur_read_addr;
+            cur_read_addr += 1;
+            remain_bytes -= 1;
+            buffer_off += 1;
+            blk_read_off += 1;
+        }else{
+            // find the following block
+            int flag = 0;
+            while(start_blk + i < 30 && inode->direct[start_blk + i] != -1){
+                // found
+                if(inode->direct[start_blk + i] != -1){
+                    this_block = inode->direct[start_blk + i];
+                    this_block_addr = this_block * UFS_BLOCK_SIZE;
+                    cur_read_addr = this_block_addr;
+                    flag = 1;
+                    blk_read_off = 0;
+                    break;
+                }
+                i++;
+            }
+            // not found, error
+            if(!flag){
+                server_Error(&reply);
+                return -1;
+            }
+        }
+    }
+    reply.inum = inum;
+    UDP_Write(sd, &caddr, (char*)&reply, sizeof(MFS_Msg_t));
 }
+
 int server_Creat(int pinum, int type, char *name){
     // remember to include \0 at the end of dir_ent_t's name field!
+    MFS_Msg_t reply;
+    reply.msg_type = MFS_UNLINK;
+    unsigned int inode_bit = get_bit(inbm_addr, pinum);
+    // pinum does not exist
+    if(!inode_bit){
+        server_Error(&reply);
+        return -1;
+    }
+    inode_t* inode = inrg_addr + pinum * UFS_BLOCK_SIZE;
+    int size = inode->size;
+    int type = inode->type;
+    // error if it's not the parent directory
+    if(type != MFS_DIRECTORY){
+        server_Error(&reply);
+        return -1;
+    }
+    // int entry_num = (UFS_BLOCK_SIZE / sizeof(dir_ent_t)) * (size / UFS_BLOCK_SIZE) + size % UFS_BLOCK_SIZE / sizeof(dir_ent_t); // niubi algorithm
+    // for 找最后一个不是-1的 如果写入entry 如果不能写入 则找新的block
+    int block_idx = 0;
+    while(inode->direct[block_idx] != -1){
+        block_idx++;
+    }
+    block_idx--;
+    unsigned int this_block = inode->direct[block_idx]; // in blocks current writing block
+    unsigned int this_block_addr = *((int*)start) + this_block * UFS_BLOCK_SIZE;
+
+
     return 0;
 }
 int server_Unlink(int pinum, char *name){
