@@ -25,9 +25,9 @@ extern unsigned int get_bit(unsigned int *bitmap, int position);
 extern void set_bit(unsigned int *bitmap, int position);
 
 int server_Error(MFS_Msg_t* reply){
+    reply->msg_type = MFS_ERROR;
     reply->inum = -1;
-    void* r = (void*)reply;
-    UDP_Write(sd, &caddr, (char*)r, sizeof(MFS_Msg_t));
+    UDP_Write(sd, &caddr, (char*)(void*)r, sizeof(MFS_Msg_t));
     return 0;
 }
 
@@ -71,7 +71,8 @@ void* lookup(int pinum, char *name){
         return rc_err;
     }
     int size = inode->size;
-    int entry_num = (UFS_BLOCK_SIZE / sizeof(dir_ent_t)) * (size / UFS_BLOCK_SIZE) + size % UFS_BLOCK_SIZE; // niubi algorithm
+    int entry_num = (UFS_BLOCK_SIZE / sizeof(dir_ent_t)) * (size / UFS_BLOCK_SIZE) + 
+        ((size % UFS_BLOCK_SIZE) / sizeof(dir_ent_t)); // niubi algorithm
     int num_block = size / UFS_BLOCK_SIZE + 1;
     unsigned int data_blocks[num_block]; // stores the blocks' addr (in blocks)
     dir_ent_t* entries[entry_num];
@@ -82,7 +83,7 @@ void* lookup(int pinum, char *name){
     int remain_entry = entry_num;
     for(int i = 0; i < num_block; i++){
         unsigned int data_block = data_blocks[i];
-        unsigned int data_addr = data_block * UFS_BLOCK_SIZE;
+        unsigned int data_addr = data_block * UFS_BLOCK_SIZE; // relative address
         if(!get_bit(dbm_addr, data_block - super->data_region_addr)){
             return rc_err;
         }
@@ -92,11 +93,11 @@ void* lookup(int pinum, char *name){
         }else{
             loopend = UFS_BLOCK_SIZE / sizeof(dir_ent_t);
         }
-        void* data_ptr = (void*)(intptr_t)data_addr;
+        void* data_ptr = (void*)((intptr_t)data_addr + (intptr_t)start); // real address
         for(int j = 0; j < loopend; j++){
             entries[j + (UFS_BLOCK_SIZE / sizeof(dir_ent_t)) * i] = (dir_ent_t*)data_ptr;
             remain_entry--;
-            data_ptr = (void*)data_ptr;
+            data_ptr = (void*)data_ptr; // real address
             data_ptr += sizeof(dir_ent_t);
         }
     }
@@ -139,25 +140,30 @@ int server_Write(int inum, char *buffer, int offset, int nbytes){
         return -1;
     }
     // find the start location of offset to write
-    int start_blk = offset / 4095;
-    int start_off = offset % 4095;
+    int start_blk = offset / 4096;
+    int start_off = offset % 4096;
     int remain_bytes = nbytes;
     int blk_write_off = start_off;
     int buffer_off = 0;
-    unsigned int this_block = inode->direct[start_blk]; // in blocks current writing block
+    unsigned int this_block = inode->direct[start_blk]; // current writing block (in blocks)
     if(!get_bit(dbm_addr, this_block - super->data_region_addr)){ // if this block is unused
         server_Error(&reply);
         return -1;
     }
-    unsigned int this_block_addr = this_block * UFS_BLOCK_SIZE;
-    unsigned int cur_write_addr = this_block_addr + start_off;
+    unsigned int this_block_addr = this_block * UFS_BLOCK_SIZE; // relative addr
+    unsigned int cur_write_addr = this_block_addr + start_off; // relative addr
 
     // write until this block is full
-    // to another block(if there's following block, use that, otherwise use a unused)
+    // to another block(if there's following block, use that, otherwise use an unused)
     int i = 0;
+    unsigned int write_addrs[nbytes]; // stores real addrs
+    unsigned int data_block_use = -1; // extra data block number to use 
+    //TODO: make it to an array for more than 4096 bytes per write
     while(remain_bytes > 0){
         if(blk_write_off < 4096){
-            *(char*)(void*)(intptr_t)cur_write_addr = *(buffer + buffer_off);
+            // write one byte by one byte
+            // no real write here, just record to-write addresses
+            write_addrs[buffer_off] = cur_write_addr;
             cur_write_addr += 1;
             remain_bytes -= 1;
             buffer_off += 1;
@@ -165,44 +171,58 @@ int server_Write(int inum, char *buffer, int offset, int nbytes){
         }else{
             // find the following block
             int flag = 0;
-            while(start_blk + i < 30 && inode->direct[start_blk + i] != -1){
+            i += 1;
+            if(start_blk + i >= DIRECT_PTRS){
+                server_Error(&reply);
+                return -1;
+            }
+            if(inode->direct[start_blk + i] != -1){
                 // found
-                if(inode->direct[start_blk + i] != -1){
-                    this_block = inode->direct[start_blk + i];
-                    this_block_addr = this_block * UFS_BLOCK_SIZE;
-                    cur_write_addr = this_block_addr;
-                    flag = 1;
-                    blk_write_off = 0;
-                    break;
-                }
-                i++;
-            }
-            if(start_blk + i >= 30){// TODO: error here, recover?
-            }
-            // not found
+                this_block = inode->direct[start_blk + i];
+                this_block_addr = this_block * UFS_BLOCK_SIZE;
+                cur_write_addr = this_block_addr;
+                flag = 1;
+                blk_write_off = 0;
+                continue;
+            }            
+            // following block is not used
             // find a new one
+            int has_place = 0;
             if(!flag){
                 int j;
                 for(j = 0; j < super->num_data; j++){
-                    if(!get_bit(dbm_addr, j)) break; // found jth data block isn't used
+                    if(get_bit(dbm_addr, j)) continue; // jth data block is used, continue find
                     // use jth data block
                     this_block = j + super->data_region_addr;
                     this_block_addr = this_block * UFS_BLOCK_SIZE;
                     cur_write_addr = this_block_addr;
-                    // update inode direct
-                    inode->direct[start_blk + i + 1] = this_block;
                     blk_write_off = 0;
-                    // set jth data block to used
-                    set_bit(dbm_addr, j);
+                    has_place = 1;
+                    // jth data block will be used
+                    data_block_use = this_block;
                     break;                   
                 }
                 // no place remaining!
-                // TODO: error here
+                if(!has_place){
+                    server_Error(&reply);
+                    return -1;
+                }
             }
         }
     }
+    // real write here
+    for(int i = 0; i < nbytes; i++){
+        *(char*)(void*)(intptr_t)(write_addrs[i] + (intptr_t)start) = buffer[i]; // real address
+    }
+    set_bit(dbm_addr, data_block_use);
     // update inode
     inode->size += nbytes;
+    for(int i = 0; i < DIRECT_PTRS; i++){
+        if(inode->direct[i] == -1){
+            inode->direct[i] = data_block_use + super->data_region_addr;
+            break;
+        }
+    }
     // synchronize to disk
     if(msync(start, img_sz, MS_SYNC) == -1){
         server_Error(&reply);
@@ -218,7 +238,6 @@ int server_Read(int inum, char *buffer, int offset, int nbytes){
     return 0;
 }
 int server_Creat(int pinum, int type, char *name){
-    // remember to include \0 at the end of dir_ent_t's name field!
     return 0;
 }
 int server_Unlink(int pinum, char *name){
@@ -240,6 +259,7 @@ int server_Unlink(int pinum, char *name){
     if(inode_c->type == UFS_DIRECTORY && inode_c->size != 0){
         // check if its void
         server_Error(&reply);
+        return -1;
     }
     // unlink
     // set this inode bitmap to zero
@@ -252,26 +272,86 @@ int server_Unlink(int pinum, char *name){
         i++;
     }
     // shift back a dir_ent_t in parent directory
-    // FIXME: Not considered in separate blocks
     dir_ent_t* cur_dir = (dir_ent_t*)dir_entry;
     dir_ent_t* next_dir = cur_dir;
-    unsigned int start_dir_addr = *(int*)(void*)cur_dir;
-    unsigned int start_file_addr = *(int*)(void*)inode_p;
-    int size_diff = start_dir_addr - start_file_addr;
+    unsigned int start_dir_addr = *(int*)(void*)cur_dir - (intptr_t)start; // relative address
+    unsigned int start_dir_block = start_dir_addr / 4096; // the start editing block number
+    unsigned int nth_block; // the nth block in parent directory file
+    for(int i = 0; i < DIRECT_PTRS; i++){
+        if(inode_p->direct[i] == start_dir_block){
+            nth_block = i;
+            break;
+        }
+    }
+    unsigned int start_file_addr = inode_p->direct[0] * 4096; // the starting relative file addr
+    int size_diff  = start_dir_addr % 4096 + nth_block * 4096;
     int size_remain = inode_p->size - size_diff;
+    int cur_off_in_block = start_dir_addr % 4096 / sizeof(dir_ent_t); // current offset(in dir_ent_t) in one block
+    int cur_block = nth_block;
+    // one block has 0-127th dir_ent_t
     for(int i = 1; i < size_remain / sizeof(dir_ent_t); i += 1){
+        if(cur_off_in_block == 127){ // the last dir_ent_t in one block
+            // copy from the first dir_ent_t in the next block
+            // then set cur_off_in_block to 0
+            // set the cur_dir, next_dir to the first in the next block
+            cur_block += 1;
+            next_dir = inode_p->direct[cur_block];
+            if(next_dir == -1){
+                // no more data in this directory file, finish
+                break;
+            }
+            memcpy(cur_dir, next_dir, sizeof(dir_ent_t));
+            cur_dir = next_dir;
+            cur_off_in_block = 0;            
+            continue;
+        }
         next_dir += 1;
         memcpy(cur_dir, next_dir, sizeof(dir_ent_t));
         cur_dir += 1;
+        cur_off_in_block += 1;
     }
     // set size
     inode_p->size -= sizeof(dir_ent_t);
-
+    // check if direct field need to -1
+    unsigned int blk_need = inode_p->size / 4096 + 1;
+    unsigned int blk_used;
+    for(blk_used = 0; i < DIRECT_PTRS; i++){
+        if(inode_p->direct[blk_used] == -1){
+            break;
+        }
+    }
+    if(blk_used > blk_need){
+        unsigned int blk = inode_p->direct[blk_used - 1];
+        set_bit(dbm_addr, blk - super->data_region_addr);
+        inode_p->direct[blk_used - 1] = -1;
+    }
+    // synchronize
+    if(msync(start, img_sz, MS_SYNC) == -1){
+        server_Error(&reply);
+        return -1;
+    }
+    // send packet
+    reply.inum = inode_c->inum;
+    UDP_Write(sd, &caddr, (char*)&reply, sizeof(MFS_Msg_t));
     return 0;
 
 }
 int server_Shutdown(){
-    return 0;
+    MFS_Msg_t reply;
+    reply.msg_type = MFS_SHUTDOWN;
+    if(msync(start, img_sz, MS_SYNC) == -1){
+        char message[] = "Shutdown failed: msync() failed!";
+        strcpy(reply.buf, message);
+        server_Error(&reply);
+        return -1;
+    }
+    if(munmap(start, img_sz, MS_SYNC) == -1){
+        char message[] = "Shutdown failed: munmap() failed!";
+        strcpy(reply.buf, message);
+        server_Error(&reply);
+        return -1;
+    }
+    exit(0);
 }
 
 void intHandler(int dummy) {
@@ -311,10 +391,10 @@ int main(int argc, char *argv[]) {
         MFS_Msg_t msg;
         printf("server:: waiting...\n");
         int rc = UDP_Read(sd, &caddr, (char*)&msg, MFS_BUFFER);
-        printf("server:: read message [size:%d contents:(%s)]\n", rc, (char*)&msg);
-
         // here
         if(rc < 0) continue;
+
+        printf("server:: read message [size:%d contents:(%s)]\n", rc, (char*)&msg);
         switch(msg.msg_type){
             case MFS_LOOKUP:
                 server_Lookup(msg.inum, (char*)msg.buf);
@@ -338,17 +418,11 @@ int main(int argc, char *argv[]) {
                 server_Shutdown();
                 break;
             default:
-                server_Error(&msg);
+                MFS_Msg_t rs;
+                rs.msg_type = MFS_ERROR;
+                server_Error(&rs);
                 break;
         }
-        if (rc > 0) {
-            char reply[4096];
-            sprintf(reply, "goodbye world");
-            rc = UDP_Write(sd, &caddr, reply, MFS_BUFFER);
-            printf("server:: reply\n");
-        } 
     }
     return 0; 
 }
-
-
