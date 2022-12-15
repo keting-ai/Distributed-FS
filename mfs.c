@@ -12,21 +12,34 @@ int sock_fd;
 struct timeval tv;
 struct sockaddr_in saddr, caddr;
 
-// TODO: What if the packet sent first is received last?
-
 int send_rcv(char* message, char* respond){
-    int send_rc = UDP_Write(sock_fd, &saddr, message, sizeof(MFS_Msg_t));
-    if(send_rc < 0){
-        return -1;
+    struct timeval tv;
+    tv.tv_sec = 10; // timeout after 10 secs
+    fd_set readfds;
+    while(1){
+        FD_ZERO(&readfds);
+        FD_SET(sockfd,&readfds);
+
+        int send_rc = UDP_Write(sock_fd, &saddr, message, sizeof(MFS_Msg_t));
+        if(send_rc < 0){
+            return -1;
+        }
+        // a timer
+        if(select(sockfd+1, &readfds, NULL, NULL, &timeout) < 0){
+            return -1;
+        }
+        if(FD_ISSET(sockfd,&readfds)){
+            int rcv_rc = UDP_Read(sock_fd, &saddr, respond, sizeof(MFS_Msg_t));
+            if(rcv_rc < 0) {
+                return -1;
+            }
+            MFS_Msg_t* rsp = (void*)respond; 
+            printf("CLIENT:: Type:%d Inum:%d Block:%d Message:%s\n", 
+                rsp->msg_type, rsp->inum, rsp->offset, (char *)rsp->buf);
+            break;
+        }
+        // else send and receive again
     }
-    // TODO: lost packet? add a timer?
-    int rcv_rc = UDP_Read(sock_fd, &saddr, respond, sizeof(MFS_Msg_t));
-    if(rcv_rc < 0) {
-        return -1;
-    }
-    MFS_Msg_t* rsp = (void*)respond; 
-    printf("CLIENT:: Type:%d Inum:%d Block:%d Message:%s\n", 
-            rsp->msg_type, rsp->inum, rsp->offset, (char *)rsp->buf);
     return 0;
 }
 
