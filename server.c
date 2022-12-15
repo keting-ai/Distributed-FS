@@ -27,7 +27,7 @@ extern void set_bit(unsigned int *bitmap, int position);
 int server_Error(MFS_Msg_t* reply){
     reply->msg_type = MFS_ERROR;
     reply->inum = -1;
-    UDP_Write(sd, &caddr, (char*)(void*)r, sizeof(MFS_Msg_t));
+    UDP_Write(sd, &caddr, (char*)(void*)reply, sizeof(MFS_Msg_t));
     return 0;
 }
 
@@ -109,14 +109,16 @@ void* lookup(int pinum, char *name){
             return (void*)entries[i];
         }
     }
-    return rc_err;
+    // not found
+    void* rc_notfound = (void*)(intptr_t)-2;
+    return rc_notfound;
 }
 
 int server_Lookup(int pinum, char* name){
     MFS_Msg_t reply;
     reply.msg_type = MFS_LOOKUP;
     void* ptr = lookup(pinum, name);
-    if(*(int*)ptr == -1){
+    if(*(int*)ptr == -1 || -2){
         server_Error(&reply);
         return -1;
     }
@@ -274,7 +276,7 @@ int server_Read(int inum, char *buffer, int offset, int nbytes){
     int i = 0;
     while(remain_bytes > 0){
         if(blk_read_off < 4096){
-            *(buffer + buffer_off) = *(char*)(void*)(intptr_t)cur_read_addr + (intptr_t)start;
+            *(buffer + buffer_off) = *(char*)(void*)(intptr_t)cur_read_addr + (intptr_t)start; //TODO: check this
             cur_read_addr += 1;
             remain_bytes -= 1;
             buffer_off += 1;
@@ -303,11 +305,20 @@ int server_Read(int inum, char *buffer, int offset, int nbytes){
     }
     reply.inum = inum;
     UDP_Write(sd, &caddr, (char*)&reply, sizeof(MFS_Msg_t));
+    return 0;
 }
 
-int get_inum(){
+int get_free_inum(){
     for(int i = 0; i < super->num_inodes; i++){
         int bit = get_bit(inbm_addr, i);
+        if(bit == 0) return i;
+    }
+    return -1;
+}
+
+int get_free_datanum(){
+    for(int i = 0; i < super->num_data; i++){
+        int bit = get_bit(dbm_addr, i);
         if(bit == 0) return i;
     }
     return -1;
@@ -327,6 +338,18 @@ int server_Creat(int pinum, int type, char *name){
         server_Error(&reply);
         return -1;
     }
+    // check if name already exist
+
+    void* ptr = lookup(pinum, name);
+    if(*(int*)ptr == -1){
+        server_Error(&reply);
+        return -1;
+    }
+    if(*(int*)ptr != -2){
+        reply.inum = ((dir_ent_t*)ptr)->inum;
+        UDP_Write(sd, &caddr, (char*)&reply, sizeof(MFS_Msg_t));
+        return 0;
+    }
     inode_t* inode_p = inrg_addr + pinum * UFS_BLOCK_SIZE;
     int p_size = inode_p->size;
     int p_type = inode_p->type;
@@ -342,11 +365,12 @@ int server_Creat(int pinum, int type, char *name){
         block_idx++;
     }
     block_idx--; // the last valid block index
+    int remain_entry = sizeof(inode_p) % sizeof(dir_ent_t); // calculate the remain entries
     unsigned int dir_block = inode_p->direct[block_idx]; // in blocks current writing block
     unsigned int block_addr = dir_block * UFS_BLOCK_SIZE;
 
-    int entry_num = (UFS_BLOCK_SIZE / sizeof(dir_ent_t)) * (p_size / UFS_BLOCK_SIZE) + ((p_size % UFS_BLOCK_SIZE) / sizeof(dir_ent_t)); // niubi algorithm
-    int remain_entry = (block_idx + 1) * 128 - entry_num; //the number of remaining entries in the last block
+    // int entry_num = (UFS_BLOCK_SIZE / sizeof(dir_ent_t)) * (p_size / UFS_BLOCK_SIZE) + ((p_size % UFS_BLOCK_SIZE) / sizeof(dir_ent_t)); // niubi algorithm
+    // int remain_entry = (block_idx + 1) * 128 - entry_num; //the number of remaining entries in the last block
     dir_ent_t* entries[remain_entry];
     void* dir_block_addr = (void*)((intptr_t)block_addr + (intptr_t)start);; // real address
     int j;
@@ -361,59 +385,102 @@ int server_Creat(int pinum, int type, char *name){
     // if the last block is not full
     if(sizeof(entries) < (4096-32)){
         strcpy(entries[j+1]->name, name); //FIXME: 不知道能不能直接用entries
-        entries[j+1]->inum = get_inum();
-        set_bit(inbm_addr, get_inum());
+        entries[j+1]->inum = get_free_inum();
+        set_bit(inbm_addr, get_free_inum());
     }
     // if full, find another
     if(sizeof(entries) >= (4096-32)){
         // find the following block
         unsigned int new_block;
         unsigned int new_block_addr;
-        int flag = 0;
-        int i = 0;
-        while((block_idx + i) <= 30){
-            if(inode_p->direct[block_idx + i] == -1){
-                // found
-                flag = 1;
-                new_block = inode_p->direct[block_idx + i];
-                new_block_addr = ((intptr_t)start + (intptr_t)new_block * UFS_BLOCK_SIZE); //real address
-                entries[j+1] = (dir_ent_t*)dir_block_addr;
-                strcpy((dir_ent_t*)new_block_addr->name, name);
-                (dir_ent_t*)new_block_addr->inum = get_inum();
-                set_bit(inbm_addr, get_inum());
-                break;
-            }
-            i++;
+        int has_place = 0;
+        int k;
+        for(k = 0; k < super->num_data; k++){
+            if(get_bit(dbm_addr, j)) continue; // jth data block is used, continue find
+            // use jth data block
+            new_block = k + super->data_region_addr;
+            new_block_addr = new_block * UFS_BLOCK_SIZE;
+            break;                   
         }
-        // no blocks in this inode, error
-        if(flag == 0){
+        // no place remaining!
+        if(!has_place){
             server_Error(&reply);
             return -1;
         }
-                    
+        entries[j+1] = (dir_ent_t*)(void*)(intptr_t)new_block_addr;
+        strcpy(entries[k+1]->name, name);
+        entries[j+1]->inum = get_free_inum();
+        set_bit(inbm_addr, get_free_inum());
     }
     // set size of parent directory
     inode_p->size += sizeof(dir_ent_t);
     // if create regular file ...
+    int inode_num;
     if(type == MFS_REGULAR_FILE){
-
+        // add new inode
+        inode_num = get_free_inum();
+        inode_t* new_inode = inrg_addr + inode_num * sizeof(inode_t);
+        // type
+        new_inode->type = MFS_REGULAR_FILE;
+        // size
+        new_inode->size = 0;
+        int data_num = get_free_datanum();
+        unsigned int data_addr = (intptr_t)(drg_addr + data_num * MFS_BLOCK_SIZE); // TODO: Check this
+        // dir
+        new_inode->direct[0] = data_addr;
+        // update inode and data bitmap
+        set_bit(inbm_addr, inode_num);
+        set_bit(dbm_addr, data_num);
     }
     // if create directory file ...
     if(type == MFS_DIRECTORY){
+        // add new inode
+        inode_num = get_free_inum();
+        inode_t* new_inode = inrg_addr + inode_num * sizeof(inode_t);
 
+        // type
+        new_inode->type = MFS_DIRECTORY;
+
+        // size -> 64: write in contains . and ..
+        new_inode->size = 32*2;
+        int data_num = get_free_datanum();
+        unsigned int data_addr_pos = (intptr_t)(drg_addr + data_num * MFS_BLOCK_SIZE);
+        void* data_addr_ptr = (void*)(intptr_t)(drg_addr + data_num * MFS_BLOCK_SIZE); // TODO: Check this
+        // write in . and .. in data region
+        dir_ent_t* entry1 = (dir_ent_t*)data_addr_ptr;
+        entry1->inum = get_free_inum();
+        strcpy(entry1->name, ".");
+        void* data_addr_ptr2 = (void*)(intptr_t)(drg_addr + data_num * MFS_BLOCK_SIZE + 32); // TODO: Check this
+        dir_ent_t* entry2 = (dir_ent_t*)data_addr_ptr2;
+        entry2->inum = get_free_inum();
+        strcpy(entry2->name, "..");
+
+        // dir
+        new_inode->direct[0] = data_addr_pos;
+        // update inode and data bitmap
+        set_bit(inbm_addr, inode_num);
+        set_bit(dbm_addr, data_num);
     }
-
-
+    // synchronize
+    if(msync(start, img_sz, MS_SYNC) == -1){
+        server_Error(&reply);
+        return -1;
+    }
+    // send packet
+    reply.inum = inode_num;
+    UDP_Write(sd, &caddr, (char*)&reply, sizeof(MFS_Msg_t));
     return 0;
 }
+
 int server_Unlink(int pinum, char *name){
     MFS_Msg_t reply;
     reply.msg_type = MFS_UNLINK;
     void* dir_entry = lookup(pinum, name);
-    if(*(int*)dir_entry == -1){
+    if(*(int*)dir_entry == -1 || -2){
         server_Error(&reply);
         return -1;
     }
+    int rp_inum = ((dir_ent_t*)dir_entry)->inum;
     int inum = ((dir_ent_t*)dir_entry)->inum;
     if(!get_bit(inbm_addr, inum)){
         server_Error(&reply);
@@ -461,8 +528,8 @@ int server_Unlink(int pinum, char *name){
             // then set cur_off_in_block to 0
             // set the cur_dir, next_dir to the first in the next block
             cur_block += 1;
-            next_dir = inode_p->direct[cur_block];
-            if(next_dir == -1){
+            next_dir = (dir_ent_t*)(intptr_t)inode_p->direct[cur_block];
+            if((long int)next_dir == -1){
                 // no more data in this directory file, finish
                 break;
             }
@@ -497,7 +564,7 @@ int server_Unlink(int pinum, char *name){
         return -1;
     }
     // send packet
-    reply.inum = inode_c->inum;
+    reply.inum = rp_inum;
     UDP_Write(sd, &caddr, (char*)&reply, sizeof(MFS_Msg_t));
     return 0;
 
@@ -511,7 +578,7 @@ int server_Shutdown(){
         server_Error(&reply);
         return -1;
     }
-    if(munmap(start, img_sz, MS_SYNC) == -1){
+    if(munmap(start, img_sz) == -1){
         char message[] = "Shutdown failed: munmap() failed!";
         strcpy(reply.buf, message);
         server_Error(&reply);
