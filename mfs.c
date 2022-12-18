@@ -7,28 +7,30 @@
 #include <fcntl.h>
 #include <sys/time.h>
 #include <stdio.h>
+#include <time.h>
 
-int sock_fd;
-struct timeval tv;
-struct sockaddr_in saddr, caddr;
+static int sock_fd;
+static struct timeval tv;
+static struct sockaddr_in saddr, caddr;
 
+/*
 int send_rcv(char* message, char* respond){
     struct timeval tv;
     tv.tv_sec = 10; // timeout after 10 secs
     fd_set readfds;
     while(1){
         FD_ZERO(&readfds);
-        FD_SET(sockfd,&readfds);
+        FD_SET(sock_fd,&readfds);
 
         int send_rc = UDP_Write(sock_fd, &saddr, message, sizeof(MFS_Msg_t));
         if(send_rc < 0){
             return -1;
         }
         // a timer
-        if(select(sockfd+1, &readfds, NULL, NULL, &timeout) < 0){
+        if(select(sock_fd+1, &readfds, NULL, NULL, &tv) < 0){
             return -1;
         }
-        if(FD_ISSET(sockfd,&readfds)){
+        if(FD_ISSET(sock_fd,&readfds)){
             int rcv_rc = UDP_Read(sock_fd, &saddr, respond, sizeof(MFS_Msg_t));
             if(rcv_rc < 0) {
                 return -1;
@@ -42,9 +44,21 @@ int send_rcv(char* message, char* respond){
     }
     return 0;
 }
+*/
+
+int send_rcv(char* message, char* respond){
+    int send_rc = UDP_Write(sock_fd, &saddr, message, sizeof(MFS_Msg_t));
+    int rcv_rc = UDP_Read(sock_fd, &saddr, respond, sizeof(MFS_Msg_t));
+    return rcv_rc;
+}
 
 int MFS_Init(char *hostname, int port){
-    sock_fd = UDP_Open(10000);
+    int MIN_PORT = 20000;
+    int MAX_PORT = 40000;
+
+    srand(time(0));
+    int port_num = (rand() % (MAX_PORT - MIN_PORT) + MIN_PORT);
+    sock_fd = UDP_Open(port_num);
     if (sock_fd < 0) {
         return sock_fd;
     }
@@ -57,7 +71,7 @@ int MFS_Init(char *hostname, int port){
 
 int MFS_Lookup(int pinum, char *name){
     if(strlen(name) > 27) return -1;
-    int send_rc, rcv_rc;
+    //int send_rc, rcv_rc;
     MFS_Msg_t message, respond;
     message.msg_type = MFS_LOOKUP;
     message.inum = pinum;
@@ -89,14 +103,26 @@ int MFS_Write(int inum, char *buffer, int offset, int nbytes){
     MFS_Msg_t message, respond;
     message.msg_type = MFS_WRITE;
     message.inum = inum;
-    strcpy(message.buf, buffer);
+    memcpy((char*)message.buf, buffer, nbytes);
+    //printf("DEBUG: client write\n");
+    /*
+    for(int i = 0; i < nbytes; i++){
+        printf("%c", message.buf[i]);
+    }
+    printf("\n");*/
     message.offset = offset;
     message.nbytes = nbytes;
     if(send_rcv((char*)&message, (char*)&respond) < 0){
         return -1;
     }
-    if(respond.msg_type != MFS_WRITE) return -1;
-    if(respond.inum < 0) return -1;
+    if(respond.msg_type != MFS_WRITE){
+        printf("here1\n");
+        return -1;
+    }
+    if(respond.inum < 0){ 
+        printf("here2\n");
+        return -1;
+    }
     return 0;
 }
 
@@ -110,9 +136,9 @@ int MFS_Read(int inum, char *buffer, int offset, int nbytes){
     if(send_rcv((char*)&message, (char*)&respond) < 0){
         return -1;
     }
-    if(respond.msg_type != MFS_WRITE) return -1;
+    if(respond.msg_type != MFS_READ) return -1;
     if(respond.inum < 0) return -1;
-    strcpy(buffer, respond.buf);
+    memcpy(buffer, respond.buf, nbytes);
     return 0;
 }
 
@@ -149,8 +175,9 @@ int MFS_Shutdown(){
     MFS_Msg_t message, respond;
     message.msg_type = MFS_SHUTDOWN;
     if(send_rcv((char*)&message, (char*)&respond) < 0){
-        return -1;
+        return 0;
     }
     if(respond.msg_type != MFS_SHUTDOWN) return -1;
+    UDP_Close(sock_fd);
     return 0;
 }
