@@ -10,7 +10,10 @@ PROGS  := ${SRCS:.c=}
 CURDIR	:= ${shell pwd}
 
 .PHONY: all
-all: server libmfs.so
+all: server libmfs.so img
+
+img: mkfs.c
+	${CC} ${CFLAGS} mkfs.c -o mkfs
 
 libmfs.so: mfs.o
 	${CC} ${CFLAGS} -shared -Wl,-soname,libmfs.so -o libmfs.so mfs.o udp.c -lc
@@ -25,7 +28,10 @@ load:
 	export LD_LIBRARY_PATH=${CURDIR}
 
 clean:
-	rm -f ${PROGS} ${OBJS}
+	rm -f *.o
+	rm -f *.so
+	rm -f mkfs
+	rm -f *.img
 
 %.o: %.c Makefile
 	${CC} ${CFLAGS} -c $<
