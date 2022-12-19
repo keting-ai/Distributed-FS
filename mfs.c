@@ -116,11 +116,9 @@ int MFS_Write(int inum, char *buffer, int offset, int nbytes){
         return -1;
     }
     if(respond.msg_type != MFS_WRITE){
-        printf("here1\n");
         return -1;
     }
     if(respond.inum < 0){ 
-        printf("here2\n");
         return -1;
     }
     return 0;

@@ -8,8 +8,9 @@ build project using make
 **********************************************************************
 Trying to build project using make
 make
-export LD_LIBRARY_PATH=/tmp/tmpIEHwMk/p
+export LD_LIBRARY_PATH=/tmp/tmpF33hvr/p
 gcc -Wall -Werror  server.c udp.c -o server
+gcc -Wall -Werror  mkfs.c -o mkfs
 
 
 test build PASSED
@@ -29,8 +30,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 5331
-/tmp/tmpIEHwMk/p/server 5331 /home/keting/cs537/p4/test.img
+Starting server on port 8304
+/tmp/tmpF33hvr/p/server 8304 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 
@@ -52,8 +53,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 9178
-/tmp/tmpIEHwMk/p/server 9178 /home/keting/cs537/p4/test.img
+Starting server on port 9005
+/tmp/tmpF33hvr/p/server 9005 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -79,8 +80,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 9637
-/tmp/tmpIEHwMk/p/server 9637 /home/keting/cs537/p4/test.img
+Starting server on port 7557
+/tmp/tmpF33hvr/p/server 7557 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -112,8 +113,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 8805
-/tmp/tmpIEHwMk/p/server 8805 /home/keting/cs537/p4/test.img
+Starting server on port 6328
+/tmp/tmpF33hvr/p/server 6328 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -147,8 +148,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 8088
-/tmp/tmpIEHwMk/p/server 8088 /home/keting/cs537/p4/test.img
+Starting server on port 6124
+/tmp/tmpF33hvr/p/server 6124 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -182,8 +183,8 @@ total blocks        39
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 6183
-/tmp/tmpIEHwMk/p/server 6183 /home/keting/cs537/p4/test.img
+Starting server on port 8299
+/tmp/tmpF33hvr/p/server 8299 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -329,8 +330,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 5455
-/tmp/tmpIEHwMk/p/server 5455 /home/keting/cs537/p4/test.img
+Starting server on port 9714
+/tmp/tmpF33hvr/p/server 9714 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -483,8 +484,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 6776
-/tmp/tmpIEHwMk/p/server 6776 /home/keting/cs537/p4/test.img
+Starting server on port 5564
+/tmp/tmpF33hvr/p/server 5564 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -510,8 +511,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 7682
-/tmp/tmpIEHwMk/p/server 7682 /home/keting/cs537/p4/test.img
+Starting server on port 8485
+/tmp/tmpF33hvr/p/server 8485 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -541,8 +542,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 9034
-/tmp/tmpIEHwMk/p/server 9034 /home/keting/cs537/p4/test.img
+Starting server on port 5482
+/tmp/tmpF33hvr/p/server 5482 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -570,8 +571,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 5405
-/tmp/tmpIEHwMk/p/server 5405 /home/keting/cs537/p4/test.img
+Starting server on port 6313
+/tmp/tmpF33hvr/p/server 6313 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -599,8 +600,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 9245
-/tmp/tmpIEHwMk/p/server 9245 /home/keting/cs537/p4/test.img
+Starting server on port 9913
+/tmp/tmpF33hvr/p/server 9913 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -630,8 +631,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 8698
-/tmp/tmpIEHwMk/p/server 8698 /home/keting/cs537/p4/test.img
+Starting server on port 9705
+/tmp/tmpF33hvr/p/server 9705 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -661,8 +662,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 8255
-/tmp/tmpIEHwMk/p/server 8255 /home/keting/cs537/p4/test.img
+Starting server on port 6480
+/tmp/tmpF33hvr/p/server 6480 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -698,8 +699,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 8913
-/tmp/tmpIEHwMk/p/server 8913 /home/keting/cs537/p4/test.img
+Starting server on port 7467
+/tmp/tmpF33hvr/p/server 7467 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 
@@ -721,8 +722,8 @@ total blocks        36
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 5038
-/tmp/tmpIEHwMk/p/server 5038 /home/keting/cs537/p4/test.img
+Starting server on port 6978
+/tmp/tmpF33hvr/p/server 6978 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -735,8 +736,8 @@ server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
 server:: read message [size:4116 contents:()]
-Starting server on port 5038
-/tmp/tmpIEHwMk/p/server 5038 /home/keting/cs537/p4/test.img
+Starting server on port 6978
+/tmp/tmpF33hvr/p/server 6978 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -762,8 +763,8 @@ total blocks        39
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 6480
-/tmp/tmpIEHwMk/p/server 6480 /home/keting/cs537/p4/test.img
+Starting server on port 5926
+/tmp/tmpF33hvr/p/server 5926 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
@@ -1293,8 +1294,8 @@ total blocks        39
 layout details
   inode bitmap address/len 1 [1]
   data bitmap address/len  2 [1]
-Starting server on port 5453
-/tmp/tmpIEHwMk/p/server 5453 /home/keting/cs537/p4/test.img
+Starting server on port 9035
+/tmp/tmpF33hvr/p/server 9035 /home/keting/cs537/p4/test.img
 server:: waiting...
 server:: read message [size:4116 contents:()]
 server:: waiting...
